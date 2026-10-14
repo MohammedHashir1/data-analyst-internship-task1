@@ -1,0 +1,86 @@
+# Task 5: Exploratory Data Analysis (EDA)
+
+# Cell 1: Import Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Cell 2: Create Dataset
+np.random.seed(42)
+
+df = pd.DataFrame({
+    "Category": np.random.choice(["Electronics", "Furniture", "Clothing"], 200),
+    "Region": np.random.choice(["North", "South", "East", "West"], 200),
+    "Sales": np.random.randint(500, 10000, 200),
+    "Profit": np.random.randint(50, 3000, 200),
+    "Quantity": np.random.randint(1, 10, 200)
+})
+
+df.to_csv("retail_sales.csv", index=False)
+df.head()
+
+# Cell 3: Explore Dataset
+print("Dataset Information:")
+df.info()
+
+print("\nStatistical Summary:")
+print(df.describe())
+
+print("\nCategory Counts:")
+print(df["Category"].value_counts())
+
+print("\nMissing Values:")
+print(df.isnull().sum())
+
+# Cell 4: Sales Distribution
+plt.figure(figsize=(8, 5))
+sns.histplot(df["Sales"], bins=20, kde=True)
+plt.title("Sales Distribution")
+plt.xlabel("Sales")
+plt.ylabel("Frequency")
+plt.show()
+
+# Cell 5: Profit by Category
+plt.figure(figsize=(8, 5))
+sns.boxplot(data=df, x="Category", y="Profit")
+plt.title("Profit by Product Category")
+plt.show()
+
+# Cell 6: Average Sales by Region
+plt.figure(figsize=(8, 5))
+sns.barplot(data=df, x="Region", y="Sales")
+plt.title("Average Sales by Region")
+plt.show()
+
+# Cell 7: Correlation Heatmap
+plt.figure(figsize=(7, 5))
+sns.heatmap(df[["Sales", "Profit", "Quantity"]].corr(),
+            annot=True, cmap="coolwarm")
+plt.title("Correlation Between Numerical Variables")
+plt.show()
+
+# Cell 8: Pairplot
+sns.pairplot(df[["Sales", "Profit", "Quantity"]])
+plt.show()
+
+# Cell 9: Key Findings
+print("Total Sales:", df["Sales"].sum())
+print("Average Sales:", round(df["Sales"].mean(), 2))
+print("Total Profit:", df["Profit"].sum())
+
+print("Category with Highest Sales:",
+      df.groupby("Category")["Sales"].sum().idxmax())
+
+print("Region with Highest Sales:",
+      df.groupby("Region")["Sales"].sum().idxmax())
+
+# Cell 10: Save Visualizations as PDF
+from matplotlib.backends.backend_pdf import PdfPages
+
+with PdfPages("EDA_Report.pdf") as pdf:
+    for fig_num in plt.get_fignums():
+        pdf.savefig(plt.figure(fig_num))
+
+print("EDA completed successfully!")
+print("Files created: retail_sales.csv and EDA_Report.pdf")
