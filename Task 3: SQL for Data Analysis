@@ -1,0 +1,404 @@
+-- TASK 3: SQL FOR DATA ANALYSIS
+-- Database: E-commerce sample database
+-- SQL dialect: SQLite
+
+-- 1. SELECT, WHERE, ORDER BY
+-- Retrieve the latest completed orders.
+
+SELECT order_id, order_date, status
+FROM orders
+WHERE status = 'Completed'
+ORDER BY order_date DESC
+LIMIT 10;
+
+
+-- 2. Aggregate Functions
+-- Calculate total revenue, average order-item revenue,
+-- and total units sold.
+
+SELECT
+    ROUND(
+        SUM(quantity * unit_price * (1 - discount_rate)), 2
+    ) AS total_revenue,
+
+    ROUND(
+        AVG(quantity * unit_price * (1 - discount_rate)), 2
+    ) AS average_line_revenue,
+
+    SUM(quantity) AS total_units_sold
+
+FROM order_items oi
+JOIN orders o
+    ON oi.order_id = o.order_id
+WHERE o.status = 'Completed';
+
+
+-- 3. GROUP BY
+-- Analyze revenue by product category.
+
+SELECT
+    p.category,
+    ROUND(
+        SUM(oi.quantity * oi.unit_price *
+            (1 - oi.discount_rate)), 2
+    ) AS total_revenue
+
+FROM orders o
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+JOIN products p
+    ON oi.product_id = p.product_id
+
+WHERE o.status = 'Completed'
+
+GROUP BY p.category
+ORDER BY total_revenue DESC;
+
+
+-- 4. INNER JOIN
+-- Display order details with customer and product information.
+
+SELECT
+    o.order_id,
+    o.order_date,
+    c.customer_name,
+    p.product_name,
+    oi.quantity,
+    ROUND(
+        oi.quantity * oi.unit_price *
+        (1 - oi.discount_rate), 2
+    ) AS line_revenue
+
+FROM orders o
+INNER JOIN customers c
+    ON o.customer_id = c.customer_id
+INNER JOIN order_items oi
+    ON o.order_id = oi.order_id
+INNER JOIN products p
+    ON oi.product_id = p.product_id
+
+WHERE o.status = 'Completed'
+ORDER BY o.order_date DESC;
+
+
+-- 5. LEFT JOIN
+-- Count completed orders for every customer.
+
+SELECT
+    c.customer_id,
+    c.customer_name,
+    COUNT(
+        DISTINCT CASE
+            WHEN o.status = 'Completed'
+            THEN o.order_id
+        END
+    ) AS completed_orders
+
+FROM customers c
+LEFT JOIN orders o
+    ON c.customer_id = o.customer_id
+
+GROUP BY c.customer_id, c.customer_name
+ORDER BY completed_orders DESC;
+
+
+-- 6. RIGHT JOIN Equivalent in SQLite
+-- Preserve every product, including products that were never ordered.
+
+SELECT
+    p.product_id,
+    p.product_name,
+    COUNT(oi.order_item_id) AS times_ordered
+
+FROM products p
+LEFT JOIN order_items oi
+    ON p.product_id = oi.product_id
+
+GROUP BY p.product_id, p.product_name
+ORDER BY times_ordered DESC;
+
+
+-- 7. Subquery
+-- Find products priced above the average product price.
+
+SELECT
+    product_name,
+    category,
+    unit_price
+
+FROM products
+
+WHERE unit_price > (
+    SELECT AVG(unit_price)
+    FROM products
+)
+
+ORDER BY unit_price DESC;
+
+
+-- 8. Monthly Revenue Analysis
+
+SELECT
+    SUBSTR(o.order_date, 1, 7) AS month,
+
+    ROUND(
+        SUM(oi.quantity * oi.unit_price *
+            (1 - oi.discount_rate)), 2
+    ) AS monthly_revenue
+
+FROM orders o
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+
+WHERE o.status = 'Completed'
+
+GROUP BY SUBSTR(o.order_date, 1, 7)
+ORDER BY month;
+
+
+-- 9. Create a View
+-- A view makes completed sales data reusable.
+
+CREATE VIEW IF NOT EXISTS completed_order_sales AS
+
+SELECT
+    o.order_id,
+    o.order_date,
+    c.customer_name,
+    c.region,
+    p.product_name,
+    p.category,
+    oi.quantity,
+    oi.unit_price,
+    oi.discount_rate,
+
+    ROUND(
+        oi.quantity * oi.unit_price *
+        (1 - oi.discount_rate), 2
+    ) AS line_revenue
+
+FROM orders o
+JOIN customers c
+    ON o.customer_id = c.customer_id
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+JOIN products p
+    ON oi.product_id = p.product_id
+
+WHERE o.status = 'Completed';
+
+
+-- Query the view.
+
+SELECT
+    category,
+    ROUND(SUM(line_revenue), 2) AS total_revenue,
+    COUNT(DISTINCT order_id) AS total_orders
+
+FROM completed_order_sales
+
+GROUP BY category
+ORDER BY total_revenue DESC;
+
+
+-- 10. Subquery
+-- Identify completed orders worth more than the average order value.
+
+SELECT
+    order_id,
+    ROUND(order_value, 2) AS order_value
+
+FROM (
+    SELECT
+        o.order_id,
+        SUM(
+            oi.quantity * oi.unit_price *
+            (1 - oi.discount_rate)
+        ) AS order_value
+
+    FROM orders o
+    JOIN order_items oi
+        ON o.order_id = oi.order_id
+
+    WHERE o.status = 'Completed'
+
+    GROUP BY o.order_id
+) AS order_totals
+
+WHERE order_value > (
+    SELECT AVG(order_value)
+
+    FROM (
+        SELECT
+            SUM(
+                oi.quantity * oi.unit_price *
+                (1 - oi.discount_rate)
+            ) AS order_value
+
+        FROM orders o
+        JOIN order_items oi
+            ON o.order_id = oi.order_id
+
+        WHERE o.status = 'Completed'
+
+        GROUP BY o.order_id
+    ) AS average_orders
+)
+
+ORDER BY order_value DESC;
+
+
+-- 11. Indexes
+-- Improve lookup performance for common filters and joins.
+
+CREATE INDEX IF NOT EXISTS idx_orders_date
+ON orders(order_date);
+
+CREATE INDEX IF NOT EXISTS idx_orders_customer
+ON orders(customer_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_order
+ON order_items(order_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_product
+ON order_items(product_id);
+
+
+-- Inspect the query execution plan.
+
+EXPLAIN QUERY PLAN
+SELECT order_id, order_date
+FROM orders
+WHERE order_date >= '2025-06-01'
+ORDER BY order_date;
+
+
+-- 12. Revenue by Region
+
+SELECT
+    c.region,
+
+    ROUND(
+        SUM(oi.quantity * oi.unit_price *
+            (1 - oi.discount_rate)), 2
+    ) AS total_revenue
+
+FROM orders o
+JOIN customers c
+    ON o.customer_id = c.customer_id
+JOIN order_items oi
+    ON o.order_id = oi.order_id
+
+WHERE o.status = 'Completed'
+
+GROUP BY c.region
+ORDER BY total_revenue DESC;
+
+
+TASK 3: SQL FOR DATA ANALYSIS
+Database: E-commerce
+Tool: SQLite
+
+============================================================
+OUTPUT 1: REVENUE SUMMARY
+============================================================
+
+total_revenue | average_line_revenue | total_units_sold
+827970.00     | 14275.34             | 143
+
+
+============================================================
+OUTPUT 2: REVENUE BY PRODUCT CATEGORY
+============================================================
+
+category          | total_revenue
+Technology        | 589300.00
+Furniture         | 216270.00
+Office Supplies   | 22400.00
+
+
+============================================================
+OUTPUT 3: MONTHLY REVENUE
+============================================================
+
+month    | monthly_revenue
+2025-01 | 102420.00
+2025-02 | 38350.00
+2025-03 | 61750.00
+2025-04 | 104050.00
+2025-05 | 57775.00
+2025-06 | 121350.00
+2025-07 | 28100.00
+2025-08 | 84050.00
+2025-09 | 31275.00
+2025-10 | 79200.00
+2025-11 | 40000.00
+2025-12 | 79650.00
+
+
+============================================================
+OUTPUT 4: REVENUE BY REGION
+============================================================
+
+region | total_revenue
+South  | 346875.00
+North  | 207900.00
+West   | 181395.00
+East   | 91800.00
+
+
+============================================================
+OUTPUT 5: LATEST COMPLETED ORDERS
+============================================================
+
+order_id | order_date | status
+1030     | 2025-12-20 | Completed
+1029     | 2025-12-04 | Completed
+1028     | 2025-11-16 | Completed
+1027     | 2025-11-05 | Completed
+1026     | 2025-10-12 | Completed
+1025     | 2025-10-02 | Completed
+1024     | 2025-09-23 | Completed
+1023     | 2025-09-09 | Completed
+1022     | 2025-08-21 | Completed
+1021     | 2025-08-08 | Completed
+
+
+============================================================
+OUTPUT 6: PRODUCTS PRICED ABOVE AVERAGE
+============================================================
+
+product_name  | category   | unit_price
+Laptop        | Technology | 65000.00
+Standing Desk | Furniture  | 22000.00
+
+
+============================================================
+OUTPUT 7: HIGH-VALUE ORDERS
+============================================================
+
+order_id | order_value
+1016     | 70250.00
+1025     | 67100.00
+1011     | 66400.00
+1001     | 63550.00
+1030     | 63550.00
+1021     | 60300.00
+
+
+============================================================
+BUSINESS INSIGHTS
+============================================================
+
+1. Total revenue was ₹827,970.
+2. Technology generated the highest revenue at ₹589,300.
+3. South was the leading region, generating ₹346,875.
+4. June recorded the highest monthly revenue at ₹121,350.
+5. The Laptop was the highest-priced product at ₹65,000.
+6. Order 1016 had the highest order value among the results shown.
+
+NOTE:
+This project uses synthetic sample data for demonstration.
+The results are generated from that sample database.
+============================================================
+
